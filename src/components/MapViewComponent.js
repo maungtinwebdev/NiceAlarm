@@ -137,12 +137,17 @@ const MapViewComponent = forwardRef(
                 latitude: stop.latitude,
                 longitude: stop.longitude,
               }}
-              title={stop.name}
-              description="Bus Stop"
               onPress={() => onBusStopPress?.(stop)}
             >
-              <View style={[styles.busStopMarker, { backgroundColor: colors.surface }]}>
-                <Text style={styles.busStopEmoji}>🚏</Text>
+              <View style={styles.markerContainer}>
+                <View style={[styles.busStopMarker, { backgroundColor: colors.surface }]}>
+                  <Text style={styles.busStopEmoji}>🚏</Text>
+                </View>
+                <View style={[styles.labelContainer, { backgroundColor: colors.surface + 'CC' }]}>
+                  <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
+                    {stop.name}
+                  </Text>
+                </View>
               </View>
             </Marker>
           ))}
@@ -155,12 +160,17 @@ const MapViewComponent = forwardRef(
                 latitude: shop.latitude,
                 longitude: shop.longitude,
               }}
-              title={shop.name}
-              description={shop.shopType ? `Shop: ${shop.shopType}` : 'Shop'}
               onPress={() => onBusStopPress?.(shop)}
             >
-              <View style={[styles.shopMarker, { backgroundColor: colors.surface }]}>
-                <Text style={styles.shopEmoji}>🛒</Text>
+              <View style={styles.markerContainer}>
+                <View style={[styles.shopMarker, { backgroundColor: colors.surface }]}>
+                  <Text style={styles.shopEmoji}>🛒</Text>
+                </View>
+                <View style={[styles.labelContainer, { backgroundColor: colors.surface + 'CC' }]}>
+                  <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
+                    {shop.name}
+                  </Text>
+                </View>
               </View>
             </Marker>
           ))}
@@ -205,6 +215,23 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  markerContainer: {
+    alignItems: 'center',
+    width: 120,
+  },
+  labelContainer: {
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  labelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   busStopMarker: {
     width: 30,

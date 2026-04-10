@@ -157,7 +157,6 @@ export default function HomeScreen() {
       const minLon = region.longitude - region.longitudeDelta / 2;
       const maxLon = region.longitude + region.longitudeDelta / 2;
 
-      // Only fetch if zoom level is useful (e.g. delta < 0.05)
       if (region.latitudeDelta > 0.1) return;
 
       setLoadingBusStops(true);
@@ -612,10 +611,10 @@ const styles = StyleSheet.create({
   },
   topRightButtons: {
     position: 'absolute',
-    top: 68,
+    top: 125, // Moved down to be under the search bar
     right: 16,
-    gap: 10,
-    zIndex: 50,
+    gap: 12,
+    zIndex: 200,
   },
   iconButton: {
     width: 46,
