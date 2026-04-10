@@ -7,6 +7,7 @@ import {
   Text,
   StatusBar,
   Platform,
+  Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { LOCATION_TASK_NAME, ALERT_DISTANCES } from '../constants/config';
@@ -243,8 +244,19 @@ export default function HomeScreen() {
     setIsTracking(true);
     setIsAlarmActive(false);
 
-    // Request background permission
-    await requestBackgroundPermission();
+    // Ensure we have background permission for pocket/bag tracking
+    const hasBackground = await requestBackgroundPermission();
+    if (!hasBackground) {
+      Alert.alert(
+        'Background Location Required',
+        'To work in your pocket or when the screen is off, please select "Allow all the time" in location settings.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => setIsTracking(false) },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() }
+        ]
+      );
+      return;
+    }
 
     // Set up background callback
     global._distanceAlarmCallback = (loc) => {

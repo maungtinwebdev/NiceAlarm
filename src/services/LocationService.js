@@ -72,11 +72,13 @@ export async function startBackgroundLocation() {
     accuracy: Location.Accuracy.High,
     timeInterval: 5000,
     distanceInterval: 10,
-    deferredUpdatesInterval: 5000,
+    deferredUpdatesInterval: 1000,
+    deferredUpdatesDistance: 5,
     showsBackgroundLocationIndicator: true,
+    pausesLocationUpdatesAutomatically: false,
     foregroundService: {
-      notificationTitle: 'Distance Alarm Active',
-      notificationBody: 'Tracking your distance to destination...',
+      notificationTitle: 'Distance Alarm Running',
+      notificationBody: 'Distance Alarm is active in your pocket/bag.',
       notificationColor: '#4F46E5',
     },
   });
