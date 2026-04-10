@@ -37,6 +37,7 @@ import {
   loadSettings,
   saveSettings,
 } from '../services/StorageService';
+import { fetchBusStopsAround, fetchBusRoutesAround, fetchShopsAround, fetchAllPOIInBBox } from '../services/BusStopService';
 
 // Components
 import MapViewComponent from '../components/MapViewComponent';
@@ -62,6 +63,12 @@ export default function HomeScreen() {
   const [favorites, setFavorites] = useState([]);
   const [showFavorites, setShowFavorites] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [busStops, setBusStops] = useState([]);
+  const [busRoutes, setBusRoutes] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [loadingBusStops, setLoadingBusStops] = useState(false);
+  const [mapStyle, setMapStyle] = useState('hybrid'); // hybrid, street, transit
+  const regionTimeoutRef = useRef(null);
   const [settings, setSettings] = useState({
     soundEnabled: true,
     vibrationEnabled: true,
@@ -114,6 +121,58 @@ export default function HomeScreen() {
 
     const savedSettings = await loadSettings();
     setSettings(savedSettings);
+
+    // Initial fetch of bus stops
+    if (pos) {
+      loadBusStops(pos.latitude, pos.longitude);
+    }
+  };
+
+  const loadBusStops = async (lat, lon) => {
+    setLoadingBusStops(true);
+    try {
+      const [stops, routes, nearbyShops] = await Promise.all([
+        fetchBusStopsAround(lat, lon, 1500),
+        fetchBusRoutesAround(lat, lon, 1500),
+        fetchShopsAround(lat, lon, 1000) // 1km radius for shops
+      ]);
+      setBusStops(stops);
+      setBusRoutes(routes);
+      setShops(nearbyShops);
+    } catch (error) {
+      console.warn('Error loading bus stops:', error);
+    } finally {
+      setLoadingBusStops(false);
+    }
+  };
+
+  const handleRegionChange = useCallback((region) => {
+    if (isTracking) return;
+
+    if (regionTimeoutRef.current) clearTimeout(regionTimeoutRef.current);
+    
+    regionTimeoutRef.current = setTimeout(async () => {
+      const minLat = region.latitude - region.latitudeDelta / 2;
+      const maxLat = region.latitude + region.latitudeDelta / 2;
+      const minLon = region.longitude - region.longitudeDelta / 2;
+      const maxLon = region.longitude + region.longitudeDelta / 2;
+
+      // Only fetch if zoom level is useful (e.g. delta < 0.05)
+      if (region.latitudeDelta > 0.1) return;
+
+      setLoadingBusStops(true);
+      const data = await fetchAllPOIInBBox(minLat, minLon, maxLat, maxLon);
+      setBusStops(data.stops);
+      setBusRoutes(data.routes);
+      setShops(data.shops);
+      setLoadingBusStops(false);
+    }, 1000);
+  }, [isTracking]);
+
+  const toggleMapStyle = () => {
+    const styles = ['street', 'hybrid'];
+    const nextIndex = (styles.indexOf(mapStyle) + 1) % styles.length;
+    setMapStyle(styles[nextIndex]);
   };
 
   // Handle map tap to set destination
@@ -135,6 +194,9 @@ export default function HomeScreen() {
         },
         600,
       );
+
+      // Fetch bus stops around new destination
+      loadBusStops(coordinate.latitude, coordinate.longitude);
     },
     [isTracking],
   );
@@ -158,6 +220,9 @@ export default function HomeScreen() {
         },
         800,
       );
+
+      // Fetch bus stops around selected place
+      loadBusStops(place.latitude, place.longitude);
     },
     [isTracking],
   );
@@ -350,6 +415,12 @@ export default function HomeScreen() {
         alertDistance={alertDistance}
         onMapPress={handleMapPress}
         isTracking={isTracking}
+        busStops={busStops}
+        busRoutes={busRoutes}
+        shops={shops}
+        mapStyle={mapStyle}
+        onRegionChange={handleRegionChange}
+        onBusStopPress={handleSelectFavorite} // Reuse existing selection logic or similar
       />
 
       {/* Search Bar */}
@@ -373,6 +444,23 @@ export default function HomeScreen() {
           activeOpacity={0.7}
         >
           <Text style={styles.iconButtonText}>⚙️</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[
+            styles.iconButton,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              shadowColor: colors.shadow,
+            },
+          ]}
+          onPress={toggleMapStyle}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.iconButtonText}>
+            {mapStyle === 'street' ? '️🗺️' : '🛰️'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity

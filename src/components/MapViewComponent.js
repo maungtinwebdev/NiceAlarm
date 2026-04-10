@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { StyleSheet, View } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import { StyleSheet, View, Text } from 'react-native';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT, UrlTile, Polyline } from 'react-native-maps';
 import { useTheme } from '../context/ThemeContext';
 import { MAP_STYLE_DARK, DEFAULT_REGION } from '../constants/config';
 
@@ -12,6 +12,12 @@ const MapViewComponent = forwardRef(
       alertDistance,
       onMapPress,
       isTracking,
+      busStops = [],
+      busRoutes = [],
+      shops = [],
+      mapStyle = 'hybrid',
+      onRegionChange,
+      onBusStopPress,
     },
     ref,
   ) => {
@@ -49,6 +55,7 @@ const MapViewComponent = forwardRef(
           ref={mapRef}
           style={styles.map}
           provider={PROVIDER_DEFAULT}
+          mapType="none"
           initialRegion={
             userLocation
               ? {
@@ -69,8 +76,95 @@ const MapViewComponent = forwardRef(
               onMapPress(e.nativeEvent.coordinate);
             }
           }}
+          onRegionChangeComplete={onRegionChange}
           mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
         >
+          {/* Street Map Style */}
+          {mapStyle === 'street' && (
+            <UrlTile 
+              urlTemplate={
+                isDark 
+                  ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  : "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              }
+              maximumZ={19}
+              flipY={false}
+              shouldReplaceMapContent={true}
+            />
+          )}
+
+          {/* Smart Hybrid Style */}
+          {mapStyle === 'hybrid' && (
+            <>
+              <UrlTile 
+                urlTemplate="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                maximumZ={19}
+                shouldReplaceMapContent={true}
+              />
+              <UrlTile 
+                urlTemplate={
+                  isDark 
+                    ? "https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
+                    : "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
+                }
+                maximumZ={19}
+                shouldReplaceMapContent={false}
+              />
+            </>
+          )}
+
+          {/* Bus Routes (Polylines) - Glow effect for Smart Look */}
+          {!isTracking && busRoutes.map((route) => (
+            <React.Fragment key={`bus-route-group-${route.id}`}>
+              <Polyline
+                coordinates={route.path}
+                strokeColor={route.color + '33'} // Outer glow
+                strokeWidth={8}
+              />
+              <Polyline
+                coordinates={route.path}
+                strokeColor={route.color} // Core line
+                strokeWidth={3}
+              />
+            </React.Fragment>
+          ))}
+
+          {/* Bus Stops Markers */}
+          {!isTracking && busStops.map((stop) => (
+            <Marker
+              key={`bus-stop-${stop.id}`}
+              coordinate={{
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+              }}
+              title={stop.name}
+              description="Bus Stop"
+              onPress={() => onBusStopPress?.(stop)}
+            >
+              <View style={[styles.busStopMarker, { backgroundColor: colors.surface }]}>
+                <Text style={styles.busStopEmoji}>🚏</Text>
+              </View>
+            </Marker>
+          ))}
+
+          {/* Shops Markers */}
+          {!isTracking && shops.map((shop) => (
+            <Marker
+              key={`shop-${shop.id}`}
+              coordinate={{
+                latitude: shop.latitude,
+                longitude: shop.longitude,
+              }}
+              title={shop.name}
+              description={shop.shopType ? `Shop: ${shop.shopType}` : 'Shop'}
+              onPress={() => onBusStopPress?.(shop)}
+            >
+              <View style={[styles.shopMarker, { backgroundColor: colors.surface }]}>
+                <Text style={styles.shopEmoji}>🛒</Text>
+              </View>
+            </Marker>
+          ))}
+
           {/* Destination Marker */}
           {destination && (
             <>
@@ -111,6 +205,40 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  busStopMarker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#4F46E5', // or colors.primary
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  busStopEmoji: {
+    fontSize: 16,
+  },
+  shopMarker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#10B981', // green for shops
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  shopEmoji: {
+    fontSize: 14,
   },
 });
 
