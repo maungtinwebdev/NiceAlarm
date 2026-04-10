@@ -8,7 +8,6 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import * as TaskManager from 'expo-task-manager';
 import { useTheme } from '../context/ThemeContext';
 import { LOCATION_TASK_NAME, ALERT_DISTANCES } from '../constants/config';
 import { getDistanceMeters } from '../utils/distance';
@@ -46,29 +45,6 @@ import DistanceSelector from '../components/DistanceSelector';
 import AlarmControls from '../components/AlarmControls';
 import FavoritesSheet from '../components/FavoritesSheet';
 import SettingsModal from '../components/SettingsModal';
-
-// Background task definition
-TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
-  if (error) {
-    console.warn('Background location error:', error);
-    return;
-  }
-  if (data) {
-    const { locations } = data;
-    if (locations && locations.length > 0) {
-      const loc = locations[0];
-      // Background distance check happens via the event emitter pattern
-      // The component subscribes to this via a global ref
-      if (global._distanceAlarmCallback) {
-        global._distanceAlarmCallback({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-          accuracy: loc.coords.accuracy,
-        });
-      }
-    }
-  }
-});
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
