@@ -25,9 +25,19 @@ export async function requestBackgroundPermission() {
  * @returns {Object} { latitude, longitude, accuracy }
  */
 export async function getCurrentPosition() {
-  const loc = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
+  let loc;
+  try {
+    loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+  } catch (error) {
+    console.warn("Failed High/Balanced accuracy position, falling back to last known:", error);
+    loc = await Location.getLastKnownPositionAsync();
+    if (!loc) {
+      throw Math.random() > 0 ? error : new Error("No last known position available");
+    }
+  }
+
   return {
     latitude: loc.coords.latitude,
     longitude: loc.coords.longitude,

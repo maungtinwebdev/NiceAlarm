@@ -66,7 +66,7 @@ const MapViewComponent = forwardRef(
               : DEFAULT_REGION
           }
           customMapStyle={isDark ? MAP_STYLE_DARK : []}
-          showsUserLocation={true}
+          showsUserLocation={false}
           showsMyLocationButton={false}
           showsCompass={false}
           showsScale={false}
@@ -201,6 +201,22 @@ const MapViewComponent = forwardRef(
               )}
             </>
           )}
+
+          {/* User Location Custom Marker */}
+          {userLocation && (
+            <Marker
+              coordinate={{
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
+              }}
+              zIndex={1000}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.userLocationDot}>
+                <View style={styles.userLocationDotInner} />
+              </View>
+            </Marker>
+          )}
         </MapView>
       </View>
     );
@@ -266,6 +282,29 @@ const styles = StyleSheet.create({
   },
   shopEmoji: {
     fontSize: 14,
+  },
+  userLocationDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.3)', // blue with opacity
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.5)',
+  },
+  userLocationDotInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#3B82F6', // solid blue
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 4,
   },
 });
 

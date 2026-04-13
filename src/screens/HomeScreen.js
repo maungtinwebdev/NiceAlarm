@@ -52,7 +52,9 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const mapRef = useRef(null);
   const locationSubRef = useRef(null);
+  const uiWatcherRef = useRef(null);
   const isAlarmTriggeredRef = useRef(false);
+  const isTrackingRef = useRef(false);
 
   // State
   const [userLocation, setUserLocation] = useState(null);
@@ -98,12 +100,13 @@ export default function HomeScreen() {
     }
 
     // Get initial position
+    let initialPos = null;
     try {
-      const pos = await getCurrentPosition();
-      setUserLocation(pos);
+      initialPos = await getCurrentPosition();
+      setUserLocation(initialPos);
       mapRef.current?.animateToRegion(
         {
-          ...pos,
+          ...initialPos,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         },
@@ -111,6 +114,21 @@ export default function HomeScreen() {
       );
     } catch (error) {
       console.warn('Failed to get initial position:', error);
+    }
+
+    // Start UI watcher to ensure map dot always moves, even if initial position failed
+    try {
+      const watcher = await watchForegroundLocation((loc) => {
+        setUserLocation(loc);
+      });
+      uiWatcherRef.current = watcher;
+    } catch (error) {
+      console.warn('Failed to start UI watcher:', error);
+    }
+
+    // Initial fetch of bus stops if we got a position
+    if (initialPos) {
+      loadBusStops(initialPos.latitude, initialPos.longitude);
     }
 
     // Load saved data
@@ -122,11 +140,6 @@ export default function HomeScreen() {
 
     const savedSettings = await loadSettings();
     setSettings(savedSettings);
-
-    // Initial fetch of bus stops
-    if (pos) {
-      loadBusStops(pos.latitude, pos.longitude);
-    }
   };
 
   const loadBusStops = async (lat, lon) => {
@@ -362,6 +375,10 @@ export default function HomeScreen() {
     if (locationSubRef.current) {
       locationSubRef.current.remove();
       locationSubRef.current = null;
+    }
+    if (uiWatcherRef.current) {
+      uiWatcherRef.current.remove();
+      uiWatcherRef.current = null;
     }
     global._distanceAlarmCallback = null;
     try {
