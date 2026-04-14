@@ -171,7 +171,7 @@ export default function HomeScreen() {
       const minLon = region.longitude - region.longitudeDelta / 2;
       const maxLon = region.longitude + region.longitudeDelta / 2;
 
-      if (region.latitudeDelta > 0.1) return;
+      if (region.latitudeDelta > 0.02) return;
 
       setLoadingBusStops(true);
       const data = await fetchAllPOIInBBox(minLat, minLon, maxLat, maxLon);
@@ -179,7 +179,7 @@ export default function HomeScreen() {
       setBusRoutes(data.routes);
       setShops(data.shops);
       setLoadingBusStops(false);
-    }, 1000);
+    }, 2000);
   }, [isTracking]);
 
   const toggleMapStyle = () => {
