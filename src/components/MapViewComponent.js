@@ -146,15 +146,7 @@ const MapViewComponent = forwardRef(
                 markers.push(m);
               });
 
-              (data.shops || []).forEach(function(shop) {
-                var m = L.marker([shop.latitude, shop.longitude], { icon: shopIcon }).addTo(map);
-                m.on('click', function() {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'busStopPress', item: shop }));
-                });
-                markers.push(m);
-              });
-
-              // Bus routes removed for cleaner look
+              // Shops removed for cleaner look
             }
 
             // User location

@@ -229,13 +229,9 @@ export async function fetchAllPOIInBBox(minLat, minLon, maxLat, maxLon) {
   }
 
   const stopsQuery = `[out:json][timeout:30];(node["highway"="bus_stop"](${minLat}, ${minLon}, ${maxLat}, ${maxLon});node["public_transport"="stop_position"]["bus"="yes"](${minLat}, ${minLon}, ${maxLat}, ${maxLon}););out body;`;
-  const shopsQuery = `[out:json][timeout:30];node["shop"](${minLat}, ${minLon}, ${maxLat}, ${maxLon});out body;`;
 
   try {
-    const [stopsData, shopsData] = await Promise.all([
-      fetchWithRetry(stopsQuery, 30000),
-      fetchWithRetry(shopsQuery, 30000)
-    ]);
+    const stopsData = await fetchWithRetry(stopsQuery, 30000);
 
     const stops = (stopsData.elements || [])
       .filter(el => el.type === 'node' && el.lat && el.lon)
@@ -248,18 +244,7 @@ export async function fetchAllPOIInBBox(minLat, minLon, maxLat, maxLon) {
         tags: el.tags,
       }));
 
-    const shops = (shopsData.elements || [])
-      .filter(el => el.type === 'node' && el.lat && el.lon)
-      .map(el => ({
-        id: el.id.toString(),
-        name: el.tags?.name || 'Shop',
-        latitude: el.lat,
-        longitude: el.lon,
-        type: 'shop',
-        shopType: el.tags?.shop,
-        tags: el.tags,
-      }));
-
+    const shops = []; // Shops fetching disabled for cleaner map
     const routes = [];
     const result = { stops, routes, shops };
     setCache(key, result);
