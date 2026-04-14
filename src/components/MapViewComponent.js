@@ -1,8 +1,8 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT, UrlTile, Polyline } from 'react-native-maps';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useTheme } from '../context/ThemeContext';
-import { MAP_STYLE_DARK, DEFAULT_REGION } from '../constants/config';
+import { DEFAULT_REGION } from '../constants/config';
 
 const MapViewComponent = forwardRef(
   (
@@ -22,202 +22,230 @@ const MapViewComponent = forwardRef(
     ref,
   ) => {
     const { isDark, colors } = useTheme();
-    const mapRef = useRef(null);
+    const webViewRef = useRef(null);
+    const [isWebViewLoaded, setIsWebViewLoaded] = useState(false);
+
+    const HTML_CONTENT = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body { padding: 0; margin: 0; background-color: ${colors.background}; }
+          html, body, #map { height: 100%; width: 100%; }
+          .custom-marker { text-align: center; font-size: 16px; background: ${colors.surface}; border-radius: 50%; width: 30px; height: 30px; line-height: 28px; box-shadow: 0 0 5px rgba(0,0,0,0.3); border: 1.5px solid; }
+          .user-marker { background: rgba(59, 130, 246, 0.3); border: 1px solid rgba(59, 130, 246, 0.5); width: 24px; height: 24px; border-radius: 50%; position: relative; }
+          .user-marker-inner { background: #3B82F6; border: 2px solid #FFFFFF; width: 12px; height: 12px; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 2px rgba(0,0,0,0.5); }
+          .label-tooltip { background: ${colors.surface + 'CC'} !important; color: ${colors.text} !important; border: 0.5px solid rgba(0,0,0,0.1) !important; font-size: 10px; font-weight: 700; border-radius: 8px !important; padding: 2px 6px !important; box-shadow: none !important; }
+          .leaflet-tooltip-bottom:before { display: none; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${DEFAULT_REGION.latitude}, ${DEFAULT_REGION.longitude}], 12);
+          
+          let currentTileLayer = null;
+          let markers = [];
+          let shapes = [];
+          
+          const createIcon = (emoji, color) => L.divIcon({
+            className: 'custom-div-icon',
+            html: "<div class='custom-marker' style='border-color: " + color + "'>" + emoji + "</div>",
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+          });
+          
+          const busIcon = createIcon('🚏', '#4F46E5');
+          const shopIcon = createIcon('🛒', '#10B981');
+          const destIcon = createIcon('📍', '${colors.primary}');
+          const userIcon = L.divIcon({
+            className: 'user-div-icon',
+            html: "<div class='user-marker'><div class='user-marker-inner'></div></div>",
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+
+          map.on('click', (e) => {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapPress', coordinate: { latitude: e.latlng.lat, longitude: e.latlng.lng } }));
+          });
+          
+          map.on('moveend', () => {
+            const center = map.getCenter();
+            window.ReactNativeWebView.postMessage(JSON.stringify({ 
+              type: 'regionChange', 
+              region: { latitude: center.lat, longitude: center.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 } 
+            }));
+          });
+
+          window.updateMap = function(data) {
+            if (data.mapStyle && data.mapStyle !== window._currentMapStyle) {
+              window._currentMapStyle = data.mapStyle;
+              if (currentTileLayer) map.removeLayer(currentTileLayer);
+              if (data.mapStyle === 'street') {
+                currentTileLayer = L.tileLayer('https://a.basemaps.cartocdn.com/' + (data.isDark ? 'dark_all' : 'rastertiles/voyager') + '/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+              } else {
+                currentTileLayer = L.layerGroup([
+                  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+                  L.tileLayer('https://a.basemaps.cartocdn.com/' + (data.isDark ? 'dark_only_labels' : 'light_only_labels') + '/{z}/{x}/{y}{r}.png', { maxZoom: 19 })
+                ]);
+              }
+              currentTileLayer.addTo(map);
+            }
+            
+            markers.forEach(m => map.removeLayer(m));
+            shapes.forEach(s => map.removeLayer(s));
+            markers = [];
+            shapes = [];
+            
+            if (!data.isTracking) {
+              (data.busStops || []).forEach(stop => {
+                const m = L.marker([stop.latitude, stop.longitude], { icon: busIcon }).addTo(map);
+                m.bindTooltip(stop.name || '', { permanent: true, direction: 'bottom', className: 'label-tooltip', offset: [0, 8] });
+                m.on('click', () => {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'busStopPress', item: stop }));
+                });
+                markers.push(m);
+              });
+              
+              (data.shops || []).forEach(shop => {
+                const m = L.marker([shop.latitude, shop.longitude], { icon: shopIcon }).addTo(map);
+                m.bindTooltip(shop.name || '', { permanent: true, direction: 'bottom', className: 'label-tooltip', offset: [0, 8] });
+                m.on('click', () => {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'busStopPress', item: shop }));
+                });
+                markers.push(m);
+              });
+
+              (data.busRoutes || []).forEach(route => {
+                const latlngs = route.path.map(p => [p.latitude, p.longitude]);
+                shapes.push(L.polyline(latlngs, { color: route.color + '33', weight: 8 }).addTo(map));
+                shapes.push(L.polyline(latlngs, { color: route.color, weight: 3 }).addTo(map));
+              });
+            }
+            
+            if (data.userLocation) {
+              markers.push(L.marker([data.userLocation.latitude, data.userLocation.longitude], { icon: userIcon, zIndexOffset: 1000 }).addTo(map));
+            }
+            
+            if (data.destination) {
+              markers.push(L.marker([data.destination.latitude, data.destination.longitude], { icon: destIcon }).addTo(map));
+              if (data.alertDistance > 0) {
+                shapes.push(L.circle([data.destination.latitude, data.destination.longitude], {
+                  radius: data.alertDistance,
+                  color: data.colors.radiusCircleStroke,
+                  fillColor: data.colors.radiusCircleFill,
+                  fillOpacity: 1, // Let react-native hex format handling be ignored, opacity applied by leaflet
+                  weight: 2
+                }).addTo(map));
+              }
+            }
+          };
+          
+          window.animateToRegion = function(region) {
+            map.flyTo([region.latitude, region.longitude], 15, { animate: true, duration: 0.8 });
+          };
+          
+          window.fitToCoordinates = function(coords) {
+            if (!coords || coords.length === 0) return;
+            const bounds = L.latLngBounds(coords.map(c => [c.latitude, c.longitude]));
+            map.fitBounds(bounds, { padding: [60, 60], animate: true, duration: 0.8 });
+          };
+
+          window.postMessage('MAP_LOADED');
+        </script>
+      </body>
+      </html>
+    `;
 
     useImperativeHandle(ref, () => ({
       animateToRegion: (region, duration = 800) => {
-        mapRef.current?.animateToRegion(region, duration);
+        if (!isWebViewLoaded) return;
+        webViewRef.current?.injectJavaScript(`window.animateToRegion(${JSON.stringify(region)});true;`);
       },
       fitToCoordinates: (coords, options) => {
-        mapRef.current?.fitToCoordinates(coords, options);
+        if (!isWebViewLoaded) return;
+        webViewRef.current?.injectJavaScript(`window.fitToCoordinates(${JSON.stringify(coords)});true;`);
       },
     }));
 
-    // Auto-center when tracking starts
+    // Re-sync map state on data change
     useEffect(() => {
-      if (isTracking && userLocation && destination) {
-        mapRef.current?.fitToCoordinates(
-          [
-            { latitude: userLocation.latitude, longitude: userLocation.longitude },
-            { latitude: destination.latitude, longitude: destination.longitude },
-          ],
-          {
-            edgePadding: { top: 120, right: 60, bottom: 300, left: 60 },
-            animated: true,
-          },
-        );
+      if (!isWebViewLoaded) return;
+      const data = {
+        userLocation,
+        destination,
+        alertDistance,
+        isTracking,
+        busStops,
+        busRoutes,
+        shops,
+        mapStyle,
+        isDark,
+        colors,
+      };
+      webViewRef.current?.injectJavaScript(`window.updateMap(${JSON.stringify(data)});true;`);
+      
+    }, [
+      isWebViewLoaded,
+      userLocation,
+      destination,
+      alertDistance,
+      isTracking,
+      busStops,
+      busRoutes,
+      shops,
+      mapStyle,
+      isDark,
+      colors,
+    ]);
+
+    // Handle auto-centering
+    useEffect(() => {
+      if (isTracking && userLocation && destination && isWebViewLoaded) {
+        webViewRef.current?.injectJavaScript(`
+          window.fitToCoordinates([
+            { latitude: ${userLocation.latitude}, longitude: ${userLocation.longitude} },
+            { latitude: ${destination.latitude}, longitude: ${destination.longitude} }
+          ]);true;
+        `);
       }
-    }, [isTracking]);
+    }, [isTracking, isWebViewLoaded, userLocation?.latitude, userLocation?.longitude]);
+
+    const handleMessage = (event) => {
+      if (event.nativeEvent.data === 'MAP_LOADED') {
+        setIsWebViewLoaded(true);
+        return;
+      }
+      try {
+        const msg = JSON.parse(event.nativeEvent.data);
+        if (msg.type === 'mapPress' && onMapPress) {
+          onMapPress(msg.coordinate);
+        } else if (msg.type === 'regionChange' && onRegionChange) {
+          onRegionChange(msg.region);
+        } else if (msg.type === 'busStopPress' && onBusStopPress) {
+          onBusStopPress(msg.item);
+        }
+      } catch (e) {
+        // parsing error
+      }
+    };
 
     return (
       <View style={styles.container}>
-        <MapView
-          ref={mapRef}
+        <WebView
+          ref={webViewRef}
+          source={{ html: HTML_CONTENT }}
+          originWhitelist={['*']}
           style={styles.map}
-          provider={PROVIDER_DEFAULT}
-          mapType="none"
-          initialRegion={
-            userLocation
-              ? {
-                  ...userLocation,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }
-              : DEFAULT_REGION
-          }
-          customMapStyle={isDark ? MAP_STYLE_DARK : []}
-          showsUserLocation={false}
-          showsMyLocationButton={false}
-          showsCompass={false}
-          showsScale={false}
-          rotateEnabled={false}
-          onPress={(e) => {
-            if (e.nativeEvent.coordinate) {
-              onMapPress(e.nativeEvent.coordinate);
-            }
-          }}
-          onRegionChangeComplete={onRegionChange}
-          mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
-        >
-          {/* Street Map Style */}
-          {mapStyle === 'street' && (
-            <UrlTile 
-              urlTemplate={
-                isDark 
-                  ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                  : "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              }
-              maximumZ={19}
-              flipY={false}
-              shouldReplaceMapContent={true}
-            />
-          )}
-
-          {/* Smart Hybrid Style */}
-          {mapStyle === 'hybrid' && (
-            <>
-              <UrlTile 
-                urlTemplate="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                maximumZ={19}
-                shouldReplaceMapContent={true}
-              />
-              <UrlTile 
-                urlTemplate={
-                  isDark 
-                    ? "https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
-                    : "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-                }
-                maximumZ={19}
-                shouldReplaceMapContent={false}
-              />
-            </>
-          )}
-
-          {/* Bus Routes (Polylines) - Glow effect for Smart Look */}
-          {!isTracking && busRoutes.map((route) => (
-            <React.Fragment key={`bus-route-group-${route.id}`}>
-              <Polyline
-                coordinates={route.path}
-                strokeColor={route.color + '33'} // Outer glow
-                strokeWidth={8}
-              />
-              <Polyline
-                coordinates={route.path}
-                strokeColor={route.color} // Core line
-                strokeWidth={3}
-              />
-            </React.Fragment>
-          ))}
-
-          {/* Bus Stops Markers */}
-          {!isTracking && busStops.map((stop) => (
-            <Marker
-              key={`bus-stop-${stop.id}`}
-              coordinate={{
-                latitude: stop.latitude,
-                longitude: stop.longitude,
-              }}
-              onPress={() => onBusStopPress?.(stop)}
-            >
-              <View style={styles.markerContainer}>
-                <View style={[styles.busStopMarker, { backgroundColor: colors.surface }]}>
-                  <Text style={styles.busStopEmoji}>🚏</Text>
-                </View>
-                <View style={[styles.labelContainer, { backgroundColor: colors.surface + 'CC' }]}>
-                  <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
-                    {stop.name}
-                  </Text>
-                </View>
-              </View>
-            </Marker>
-          ))}
-
-          {/* Shops Markers */}
-          {!isTracking && shops.map((shop) => (
-            <Marker
-              key={`shop-${shop.id}`}
-              coordinate={{
-                latitude: shop.latitude,
-                longitude: shop.longitude,
-              }}
-              onPress={() => onBusStopPress?.(shop)}
-            >
-              <View style={styles.markerContainer}>
-                <View style={[styles.shopMarker, { backgroundColor: colors.surface }]}>
-                  <Text style={styles.shopEmoji}>🛒</Text>
-                </View>
-                <View style={[styles.labelContainer, { backgroundColor: colors.surface + 'CC' }]}>
-                  <Text style={[styles.labelText, { color: colors.text }]} numberOfLines={1}>
-                    {shop.name}
-                  </Text>
-                </View>
-              </View>
-            </Marker>
-          ))}
-
-          {/* Destination Marker */}
-          {destination && (
-            <>
-              <Marker
-                coordinate={{
-                  latitude: destination.latitude,
-                  longitude: destination.longitude,
-                }}
-                title={destination.name || 'Destination'}
-                pinColor={colors.primary}
-              />
-              {/* Alert Radius Circle */}
-              {alertDistance > 0 && (
-                <Circle
-                  center={{
-                    latitude: destination.latitude,
-                    longitude: destination.longitude,
-                  }}
-                  radius={alertDistance}
-                  fillColor={colors.radiusCircleFill}
-                  strokeColor={colors.radiusCircleStroke}
-                  strokeWidth={2}
-                />
-              )}
-            </>
-          )}
-
-          {/* User Location Custom Marker */}
-          {userLocation && (
-            <Marker
-              coordinate={{
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-              }}
-              zIndex={1000}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={styles.userLocationDot}>
-                <View style={styles.userLocationDotInner} />
-              </View>
-            </Marker>
-          )}
-        </MapView>
+          onMessage={handleMessage}
+          bounces={false}
+          scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     );
   },
@@ -231,80 +259,6 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
-  },
-  markerContainer: {
-    alignItems: 'center',
-    width: 120,
-  },
-  labelContainer: {
-    marginTop: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.1)',
-  },
-  labelText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  busStopMarker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#4F46E5', // or colors.primary
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  busStopEmoji: {
-    fontSize: 16,
-  },
-  shopMarker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#10B981', // green for shops
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  shopEmoji: {
-    fontSize: 14,
-  },
-  userLocationDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.3)', // blue with opacity
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.5)',
-  },
-  userLocationDotInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#3B82F6', // solid blue
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 4,
   },
 });
 
