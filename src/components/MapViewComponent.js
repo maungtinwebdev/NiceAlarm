@@ -12,9 +12,6 @@ const MapViewComponent = forwardRef(
       alertDistance,
       onMapPress,
       isTracking,
-      busStops = [],
-      busRoutes = [],
-      shops = [],
       mapStyle = 'hybrid',
       onRegionChange,
       onBusStopPress,
@@ -198,16 +195,7 @@ const MapViewComponent = forwardRef(
               markers = [];
               shapes = [];
 
-              if (!data.isTracking) {
-                (data.busStops || []).forEach(function(stop) {
-                  var m = L.marker([stop.latitude, stop.longitude], { icon: busIcon }).addTo(map);
-                  if (stop.name) m.bindTooltip(stop.name, { permanent: true, direction: 'bottom', className: 'label-tooltip', offset: [0, 8] });
-                  m.on('click', function() {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'busStopPress', item: stop }));
-                  });
-                  markers.push(m);
-                });
-              }
+              // Bus stops rendering removed
 
               if (data.userLocation) {
                 markers.push(L.marker([data.userLocation.latitude, data.userLocation.longitude], { icon: userIcon, zIndexOffset: 1000 }).addTo(map));
@@ -267,9 +255,6 @@ const MapViewComponent = forwardRef(
         destination,
         alertDistance,
         isTracking,
-        busStops,
-        busRoutes,
-        shops,
         mapStyle,
         isDark,
         colors,
@@ -281,9 +266,6 @@ const MapViewComponent = forwardRef(
       destination,
       alertDistance,
       isTracking,
-      busStops,
-      busRoutes,
-      shops,
       mapStyle,
       isDark,
       colors,
