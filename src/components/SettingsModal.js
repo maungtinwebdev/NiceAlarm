@@ -21,6 +21,10 @@ export default function SettingsModal({
     onSettingsChange({ ...settings, [key]: !settings[key] });
   };
 
+  const setVibrationIntensity = (intensity) => {
+    onSettingsChange({ ...settings, vibrationIntensity: intensity });
+  };
+
   return (
     <Modal
       visible={visible}
@@ -148,6 +152,46 @@ export default function SettingsModal({
               />
             </View>
 
+            {/* Vibration Intensity Selector */}
+            {settings.vibrationEnabled && (
+              <View style={styles.intensityContainer}>
+                <Text style={[styles.intensityLabel, { color: colors.textSecondary }]}>
+                  Vibration Intensity
+                </Text>
+                <View style={styles.intensityTabs}>
+                  {['low', 'medium', 'high'].map((level) => (
+                    <TouchableOpacity
+                      key={level}
+                      onPress={() => setVibrationIntensity(level)}
+                      style={[
+                        styles.intensityTab,
+                        {
+                          backgroundColor:
+                            settings.vibrationIntensity === level
+                              ? colors.primary
+                              : colors.surfaceVariant || colors.divider,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.intensityTabText,
+                          {
+                            color:
+                              settings.vibrationIntensity === level
+                                ? '#FFFFFF'
+                                : colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* Auto Stop */}
             <View
               style={[
@@ -264,6 +308,34 @@ const styles = StyleSheet.create({
   },
   settingDescription: {
     fontSize: 12,
+  },
+  intensityContainer: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  intensityLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  intensityTabs: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  intensityTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  intensityTabText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   appInfo: {
     alignItems: 'center',

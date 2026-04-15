@@ -1,34 +1,43 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import { Vibration, Platform } from 'react-native';
 
 let alarmPlayer = null;
+let vibrationLoopInterval = null;
 
 /**
- * Play the alarm sound in an infinite loop with vibration.
+ * Start the alarm (sound and/or vibration).
+ * @param {boolean} soundEnabled 
+ * @param {boolean} vibrationEnabled 
+ * @param {string} intensity - 'low', 'medium', or 'high'
  */
-export async function playAlarm() {
+export async function startAlarm(soundEnabled = true, vibrationEnabled = true, intensity = 'high') {
   try {
     await stopAlarm();
 
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-    });
+    if (soundEnabled) {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+      });
 
-    alarmPlayer = createAudioPlayer(require('../../assets/alarm.mp3'));
-    if (alarmPlayer) {
-      alarmPlayer.loop = true;
-      alarmPlayer.volume = 1.0;
-      alarmPlayer.play();
+      alarmPlayer = createAudioPlayer(require('../../assets/alarm.mp3'));
+      if (alarmPlayer) {
+        alarmPlayer.loop = true;
+        alarmPlayer.volume = 1.0;
+        alarmPlayer.play();
+      }
     }
 
-    // Vibration pattern
-    triggerVibration();
+    if (vibrationEnabled) {
+      startContinuousVibration(intensity);
+    }
   } catch (error) {
-    console.warn('SoundService.playAlarm error:', error);
-    // Fallback: at least vibrate
-    triggerVibration();
+    console.warn('SoundService.startAlarm error:', error);
+    if (vibrationEnabled) {
+      startContinuousVibration(intensity);
+    }
   }
 }
 
@@ -37,6 +46,7 @@ export async function playAlarm() {
  */
 export async function stopAlarm() {
   try {
+    stopContinuousVibration();
     if (alarmPlayer) {
       alarmPlayer.pause();
       alarmPlayer.remove();
@@ -49,13 +59,72 @@ export async function stopAlarm() {
 }
 
 /**
- * Trigger haptic vibration pattern.
+ * Trigger a single haptic vibration pulse.
+ * @param {string} intensity - 'low', 'medium', or 'high'
  */
-export async function triggerVibration() {
+export async function triggerSingleVibration(intensity = 'high') {
   try {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    if (intensity === 'low') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else if (intensity === 'medium') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
   } catch (error) {
-    console.warn('Haptics error:', error);
+    // Fallback if Haptics fails
+    Vibration.vibrate(100);
+  }
+}
+
+/**
+ * Start continuous vibration based on intensity.
+ * Handles platform differences: 
+ * - Android supports patterns and looping natively.
+ * - iOS requires an interval loop.
+ * @param {string} intensity - 'low', 'medium', or 'high'
+ */
+export function startContinuousVibration(intensity = 'high') {
+  stopContinuousVibration();
+
+  if (Platform.OS === 'android') {
+    let pattern = [];
+    if (intensity === 'low') {
+      pattern = [0, 400, 1000];
+    } else if (intensity === 'medium') {
+      pattern = [0, 600, 600];
+    } else {
+      pattern = [0, 1000, 400];
+    }
+    Vibration.vibrate(pattern, true);
+  } else {
+    // iOS doesn't support patterns or looping in the native vibrate() call.
+    // We simulate it using an interval.
+    let intervalTime = 1500;
+    if (intensity === 'low') intervalTime = 2000;
+    else if (intensity === 'medium') intervalTime = 1200;
+    else intervalTime = 800;
+
+    const performVibration = () => {
+      // For iOS, the strength is determined by the Haptics style
+      triggerSingleVibration(intensity);
+      // Also call standard vibrate as a fallback
+      Vibration.vibrate();
+    };
+
+    performVibration();
+    vibrationLoopInterval = setInterval(performVibration, intervalTime);
+  }
+}
+
+/**
+ * Stop continuous vibration.
+ */
+export function stopContinuousVibration() {
+  Vibration.cancel();
+  if (vibrationLoopInterval) {
+    clearInterval(vibrationLoopInterval);
+    vibrationLoopInterval = null;
   }
 }
 
@@ -65,4 +134,13 @@ export async function triggerVibration() {
  */
 export function isAlarmPlaying() {
   return alarmPlayer !== null && alarmPlayer.playing;
+}
+
+// Deprecated: keep for compatibility
+export async function playAlarm(intensity = 'high') {
+  return startAlarm(true, true, intensity);
+}
+
+export async function triggerVibration(intensity = 'high') {
+  return triggerSingleVibration(intensity);
 }

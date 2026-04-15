@@ -81,10 +81,23 @@ export async function saveSettings(settings) {
 export async function loadSettings() {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return raw
-      ? JSON.parse(raw)
-      : { soundEnabled: true, vibrationEnabled: true, autoStop: false };
+    const defaultSettings = { 
+      soundEnabled: true, 
+      vibrationEnabled: true, 
+      vibrationIntensity: 'high',
+      autoStop: false 
+    };
+    
+    if (!raw) return defaultSettings;
+    
+    const settings = JSON.parse(raw);
+    return { ...defaultSettings, ...settings };
   } catch {
-    return { soundEnabled: true, vibrationEnabled: true, autoStop: false };
+    return { 
+      soundEnabled: true, 
+      vibrationEnabled: true, 
+      vibrationIntensity: 'high',
+      autoStop: false 
+    };
   }
 }

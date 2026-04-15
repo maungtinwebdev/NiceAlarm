@@ -23,7 +23,8 @@ export default function AlarmControls({
 }) {
   const { colors } = useTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(1)).current;
+  const borderAnim = useRef(new Animated.Value(0)).current;
 
   // Pulse animation when tracking
   useEffect(() => {
@@ -51,27 +52,49 @@ export default function AlarmControls({
     }
   }, [isTracking, isAlarmActive]);
 
-  // Glow animation when alarm is active
+  // Glow border animation when alarm is active — keep card fully opaque and visible
   useEffect(() => {
     if (isAlarmActive) {
       const glow = Animated.loop(
         Animated.sequence([
+          Animated.timing(borderAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+          Animated.timing(borderAnim, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: false,
+          }),
+        ]),
+      );
+      glow.start();
+
+      // Slight pulse on the emoji only
+      const emojiPulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1.3,
+            duration: 500,
+            useNativeDriver: true,
+          }),
           Animated.timing(glowAnim, {
             toValue: 1,
             duration: 500,
             useNativeDriver: true,
           }),
-          Animated.timing(glowAnim, {
-            toValue: 0.3,
-            duration: 500,
-            useNativeDriver: true,
-          }),
         ]),
       );
-      glow.start();
-      return () => glow.stop();
+      emojiPulse.start();
+
+      return () => {
+        glow.stop();
+        emojiPulse.stop();
+      };
     } else {
-      glowAnim.setValue(0);
+      borderAnim.setValue(0);
+      glowAnim.setValue(1);
     }
   }, [isAlarmActive]);
 
@@ -95,19 +118,31 @@ export default function AlarmControls({
 
   const progress = getProgress();
 
+  // Interpolate border color for alarm glow effect
+  const alarmBorderColor = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.9)'],
+  });
+
   if (isAlarmActive) {
     return (
-      <Animated.View style={[styles.alarmContainer, { opacity: glowAnim }]}>
-        <View
+      <View style={styles.alarmContainer}>
+        <Animated.View
           style={[
             styles.alarmCard,
             {
               backgroundColor: colors.danger,
               shadowColor: colors.danger,
+              borderColor: alarmBorderColor,
+              borderWidth: 3,
             },
           ]}
         >
-          <Text style={styles.alarmEmoji}>🔔</Text>
+          <Animated.Text
+            style={[styles.alarmEmoji, { transform: [{ scale: glowAnim }] }]}
+          >
+            🔔
+          </Animated.Text>
           <Text style={styles.alarmTitle}>You've Arrived!</Text>
           <Text style={styles.alarmSubtitle}>
             {destination?.name || 'Destination'} — {formatDistance(currentDistance)} away
@@ -119,8 +154,8 @@ export default function AlarmControls({
           >
             <Text style={styles.stopAlarmText}>Stop Alarm</Text>
           </TouchableOpacity>
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </View>
     );
   }
 

@@ -9,6 +9,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
+import { useKeepAwake } from 'expo-keep-awake';
 import { useTheme } from '../context/ThemeContext';
 import { LOCATION_TASK_NAME, ALERT_DISTANCES } from '../constants/config';
 import { getDistanceMeters } from '../utils/distance';
@@ -22,7 +23,7 @@ import {
   startBackgroundLocation,
   stopBackgroundLocation,
 } from '../services/LocationService';
-import { playAlarm, stopAlarm, triggerVibration } from '../services/SoundService';
+import { startAlarm, stopAlarm, triggerSingleVibration } from '../services/SoundService';
 import {
   configureNotifications,
   requestNotificationPermission,
@@ -56,6 +57,14 @@ export default function HomeScreen() {
   const isAlarmTriggeredRef = useRef(false);
   const isTrackingRef = useRef(false);
 
+  // Keep screen awake while tracking or during alarm
+  useKeepAwake();
+
+  // Use refs to hold latest values for use inside callbacks (avoids stale closures)
+  const destinationRef = useRef(null);
+  const alertDistanceRef = useRef(null);
+  const settingsRef = useRef(null);
+
   // State
   const [userLocation, setUserLocation] = useState(null);
   const [destination, setDestination] = useState(null);
@@ -75,8 +84,22 @@ export default function HomeScreen() {
   const [settings, setSettings] = useState({
     soundEnabled: true,
     vibrationEnabled: true,
+    vibrationIntensity: 'high',
     autoStop: false,
   });
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    destinationRef.current = destination;
+  }, [destination]);
+
+  useEffect(() => {
+    alertDistanceRef.current = alertDistance;
+  }, [alertDistance]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // Initialize
   useEffect(() => {
@@ -161,7 +184,7 @@ export default function HomeScreen() {
   };
 
   const handleRegionChange = useCallback((region) => {
-    if (isTracking) return;
+    if (isTrackingRef.current) return;
 
     if (regionTimeoutRef.current) clearTimeout(regionTimeoutRef.current);
     
@@ -180,7 +203,7 @@ export default function HomeScreen() {
       setShops(data.shops);
       setLoadingBusStops(false);
     }, 2000);
-  }, [isTracking]);
+  }, []);
 
   const toggleMapStyle = () => {
     const styles = ['street', 'hybrid'];
@@ -191,7 +214,7 @@ export default function HomeScreen() {
   // Handle map tap to set destination
   const handleMapPress = useCallback(
     (coordinate) => {
-      if (isTracking) return;
+      if (isTrackingRef.current) return;
       setDestination({
         latitude: coordinate.latitude,
         longitude: coordinate.longitude,
@@ -211,13 +234,13 @@ export default function HomeScreen() {
       // Fetch bus stops around new destination
       loadBusStops(coordinate.latitude, coordinate.longitude);
     },
-    [isTracking],
+    [],
   );
 
   // Handle place selected from search
   const handlePlaceSelected = useCallback(
     (place) => {
-      if (isTracking) return;
+      if (isTrackingRef.current) return;
       setDestination({
         latitude: place.latitude,
         longitude: place.longitude,
@@ -237,7 +260,7 @@ export default function HomeScreen() {
       // Fetch bus stops around selected place
       loadBusStops(place.latitude, place.longitude);
     },
-    [isTracking],
+    [],
   );
 
   // Handle distance change
@@ -245,6 +268,41 @@ export default function HomeScreen() {
     setAlertDistance(value);
     saveLastDistance(value);
   }, []);
+
+  // Core location update handler — uses refs to always read latest values
+  const handleLocationUpdate = useCallback(
+    (loc) => {
+      setUserLocation(loc);
+
+      const dest = destinationRef.current;
+      const distThreshold = alertDistanceRef.current;
+
+      if (!dest || isAlarmTriggeredRef.current) return;
+
+      const dist = getDistanceMeters(
+        loc.latitude,
+        loc.longitude,
+        dest.latitude,
+        dest.longitude,
+      );
+      setCurrentDistance(dist);
+
+      // Check if within alert distance
+      if (dist <= distThreshold) {
+        triggerAlarm(dist);
+      }
+    },
+    [], // No deps needed — uses refs for fresh values
+  );
+
+  // Keep global background callback in sync
+  useEffect(() => {
+    if (isTracking) {
+      global._distanceAlarmCallback = (loc) => {
+        handleLocationUpdate(loc);
+      };
+    }
+  }, [isTracking, handleLocationUpdate]);
 
   // Start tracking
   const handleStartTracking = async () => {
@@ -254,6 +312,7 @@ export default function HomeScreen() {
     }
 
     isAlarmTriggeredRef.current = false;
+    isTrackingRef.current = true;
     setIsTracking(true);
     setIsAlarmActive(false);
 
@@ -264,7 +323,10 @@ export default function HomeScreen() {
         'Background Location Required',
         'To work in your pocket or when the screen is off, please select "Allow all the time" in location settings.',
         [
-          { text: 'Cancel', style: 'cancel', onPress: () => setIsTracking(false) },
+          { text: 'Cancel', style: 'cancel', onPress: () => {
+            setIsTracking(false);
+            isTrackingRef.current = false;
+          }},
           { text: 'Open Settings', onPress: () => Linking.openSettings() }
         ]
       );
@@ -299,71 +361,55 @@ export default function HomeScreen() {
     );
   };
 
-  // Handle location updates
-  const handleLocationUpdate = useCallback(
-    (loc) => {
-      setUserLocation(loc);
-
-      if (!destination || isAlarmTriggeredRef.current) return;
-
-      const dist = getDistanceMeters(
-        loc.latitude,
-        loc.longitude,
-        destination.latitude,
-        destination.longitude,
-      );
-      setCurrentDistance(dist);
-
-      // Check if within alert distance
-      if (dist <= alertDistance) {
-        triggerAlarm(dist);
-      }
-    },
-    [destination, alertDistance],
-  );
-
-  // Trigger alarm
+  // Trigger alarm — uses refs for fresh settings
   const triggerAlarm = async (dist) => {
     if (isAlarmTriggeredRef.current) return;
     isAlarmTriggeredRef.current = true;
     setIsAlarmActive(true);
 
-    // Sound
-    if (settings.soundEnabled) {
-      await playAlarm();
-    }
+    const currentSettings = settingsRef.current || settings;
+    const dest = destinationRef.current;
 
-    // Vibration
-    if (settings.vibrationEnabled) {
-      triggerVibration();
-    }
+    // Start Alarm (Sound & Continuous Vibration)
+    await startAlarm(
+      currentSettings.soundEnabled,
+      currentSettings.vibrationEnabled,
+      currentSettings.vibrationIntensity
+    );
 
     // Notification
     sendLocalNotification(
       '🔔 You\'ve Arrived!',
-      `You are ${Math.round(dist)}m from ${destination?.name || 'your destination'}`,
+      `You are ${Math.round(dist)}m from ${dest?.name || 'your destination'}`,
       { type: 'alarm' },
     );
 
     // Auto-stop after 30 seconds
-    if (settings.autoStop) {
+    if (currentSettings.autoStop) {
       setTimeout(() => {
         handleStopAlarm();
       }, 30000);
     }
   };
 
-  // Stop alarm (sound only)
+  // Stop alarm (sound only, then stop tracking)
   const handleStopAlarm = async () => {
     await stopAlarm();
     setIsAlarmActive(false);
-    await handleStopTracking();
+    isAlarmTriggeredRef.current = false;
+    // Now stop tracking fully
+    await cleanupTracking();
+    setIsTracking(false);
+    isTrackingRef.current = false;
+    setCurrentDistance(null);
+    await cancelAllNotifications();
   };
 
   // Stop tracking
   const handleStopTracking = async () => {
     await cleanupTracking();
     setIsTracking(false);
+    isTrackingRef.current = false;
     setIsAlarmActive(false);
     setCurrentDistance(null);
     isAlarmTriggeredRef.current = false;
