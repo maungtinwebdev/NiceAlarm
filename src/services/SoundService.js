@@ -2,8 +2,16 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Vibration, Platform } from 'react-native';
 
+let VolumeManager = null;
+try {
+  VolumeManager = require('react-native-volume-manager').VolumeManager;
+} catch (e) {
+  console.warn('VolumeManager native module not linked (e.g. running in Expo Go). Hardware volume listener disabled.');
+}
+
 let alarmPlayer = null;
 let vibrationLoopInterval = null;
+let volumeListener = null;
 
 /**
  * Start the alarm (sound and/or vibration).
@@ -14,6 +22,22 @@ let vibrationLoopInterval = null;
 export async function startAlarm(soundEnabled = true, vibrationEnabled = true, intensity = 'high') {
   try {
     await stopAlarm();
+
+    if (soundEnabled || vibrationEnabled) {
+      if (VolumeManager && !volumeListener) {
+        try {
+          VolumeManager.showNativeVolumeUI({ enabled: true });
+          volumeListener = VolumeManager.addVolumeListener(() => {
+            stopAlarm();
+            if (global._stopAlarmFromVolume) {
+              global._stopAlarmFromVolume();
+            }
+          });
+        } catch (e) {
+          console.warn('Failed to start volume listener:', e);
+        }
+      }
+    }
 
     if (soundEnabled) {
       await setAudioModeAsync({
@@ -46,6 +70,12 @@ export async function startAlarm(soundEnabled = true, vibrationEnabled = true, i
  */
 export async function stopAlarm() {
   try {
+    if (volumeListener) {
+      try {
+        volumeListener.remove();
+      } catch (e) {}
+      volumeListener = null;
+    }
     stopContinuousVibration();
     if (alarmPlayer) {
       alarmPlayer.pause();
