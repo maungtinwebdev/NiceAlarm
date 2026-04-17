@@ -273,10 +273,12 @@ export default function HomeScreen() {
         'Background Location Required',
         'To work in your pocket or when the screen is off, please select "Allow all the time" in location settings.',
         [
-          { text: 'Cancel', style: 'cancel', onPress: () => {
-            setIsTracking(false);
-            isTrackingRef.current = false;
-          }},
+          {
+            text: 'Cancel', style: 'cancel', onPress: () => {
+              setIsTracking(false);
+              isTrackingRef.current = false;
+            }
+          },
           { text: 'Open Settings', onPress: () => Linking.openSettings() }
         ]
       );
@@ -466,7 +468,7 @@ export default function HomeScreen() {
         >
           <Text style={styles.iconButtonText}>⚙️</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[
             styles.iconButton,
