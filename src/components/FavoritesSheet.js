@@ -6,6 +6,8 @@ import {
   StyleSheet,
   FlatList,
   Alert,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -22,104 +24,121 @@ export default function FavoritesSheet({
   if (!visible) return null;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.borderLight,
-          shadowColor: colors.shadowDark,
-        },
-      ]}
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          ⭐ Saved Places
-        </Text>
-        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Text style={[styles.closeText, { color: colors.textTertiary }]}>✕</Text>
-        </TouchableOpacity>
-      </View>
-
-      {favorites.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyEmoji}>📍</Text>
-          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-            No saved places yet
-          </Text>
-          <Text style={[styles.emptyHint, { color: colors.textTertiary }]}>
-            Tap the ⭐ button after selecting a destination
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={favorites}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          style={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.item,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.borderLight,
-                },
-              ]}
-              onPress={() => {
-                if (!isTracking) {
-                  onSelect(item);
-                  onClose();
-                }
-              }}
-              activeOpacity={0.7}
-              disabled={isTracking}
-              onLongPress={() => {
-                Alert.alert(
-                  'Remove Favorite',
-                  `Remove "${item.name}" from saved places?`,
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Remove',
-                      style: 'destructive',
-                      onPress: () => onRemove(item.id),
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={styles.itemIcon}>📌</Text>
-              <View style={styles.itemContent}>
-                <Text
-                  style={[styles.itemName, { color: colors.text }]}
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <Text style={[styles.itemCoords, { color: colors.textTertiary }]}>
-                  {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
-                </Text>
-              </View>
-              <Text style={[styles.itemArrow, { color: colors.textTertiary }]}>
-                ›
-              </Text>
+      <View style={styles.overlay}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={styles.overlayTouchable} />
+        </TouchableWithoutFeedback>
+        <View
+          style={[
+            styles.container,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderLight,
+              shadowColor: colors.shadowDark,
+            },
+          ]}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              ⭐ Saved Places
+            </Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <Text style={[styles.closeText, { color: colors.textTertiary }]}>✕</Text>
             </TouchableOpacity>
+          </View>
+
+          {favorites.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📍</Text>
+              <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+                No saved places yet
+              </Text>
+              <Text style={[styles.emptyHint, { color: colors.textTertiary }]}>
+                Tap the ⭐ button after selecting a destination
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={favorites}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              style={[styles.list, { flexShrink: 1 }]}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.item,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.borderLight,
+                    },
+                  ]}
+                  onPress={() => {
+                    if (!isTracking) {
+                      onSelect(item);
+                      onClose();
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  disabled={isTracking}
+                  onLongPress={() => {
+                    Alert.alert(
+                      'Remove Favorite',
+                      `Remove "${item.name}" from saved places?`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: () => onRemove(item.id),
+                        },
+                      ],
+                    );
+                  }}
+                >
+                  <Text style={styles.itemIcon}>📌</Text>
+                  <View style={styles.itemContent}>
+                    <Text
+                      style={[styles.itemName, { color: colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text style={[styles.itemCoords, { color: colors.textTertiary }]}>
+                      {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.itemArrow, { color: colors.textTertiary }]}>
+                    ›
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
           )}
-        />
-      )}
-    </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  overlayTouchable: {
+    flex: 1,
+  },
   container: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    maxHeight: '50%',
+    maxHeight: '60%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
